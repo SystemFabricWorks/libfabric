@@ -1,0 +1,111 @@
+pipeline {
+    options {
+        disableConcurrentBuilds()
+        skipStagesAfterUnstable()
+        timestamps()
+    }
+   agent {
+        node {
+            label 'suse && roce'
+        }
+    }
+    stages {
+        stage('Build') {
+            steps {
+                sh './autogen.sh'
+                sh './configure --prefix=$TMP_INSTALL_PATH/'
+                sh 'make -j 12'
+                sh 'make install'
+            }
+        }
+        stage('Test: Phase 1') {
+            failFast true
+            parallel {
+                stage('Test-Unit') {
+                    steps {
+                        echo 'stubbed-unit'
+                        sh 'true'
+                    }
+                }
+                stage('Test-Smoke') {
+                    steps {
+                        echo 'stubbed-smoke'
+                        sh 'true'
+                    }
+                }
+                stage('Test-Functional') {
+                    steps {
+                        echo 'stubbed functional'
+                        sh 'true'
+                    }
+                }
+                stage('Test-Fabtests') {
+                    steps {
+                        timeout (time: 10, unit: 'MINUTES') {
+                            withEnv(['FI_PROVIDER=\'ofi-rxm;verbs\'', 'LD_LIBRARY_PATH="$TMP_INSTALL_DIR/lib:$LD_LIBRARY_PATH"']) {
+                                sh 'srun -p mellanox -n 1 -N 1 -w wham-0-cn8 $FABTEST_PATH/bin/runfabtests.sh -p $FABTEST_PATH/bin -v -T 60 \'verbs\' 10.100.49.8 10.100.49.9 || true'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage("Deploy-Development") {
+            steps {
+                sh "make clean"
+                sh "./configure --prefix=$ROOT_INSTALL_PATH/development/libfabric"
+                sh "make -j 12"
+                sh "make install"
+            }
+        }
+        stage("Test: Phase 2") {
+            failFast true
+            parallel {
+                stage("Test-System") {
+                    steps {
+                        echo 'stubbed system'
+                        sh 'true'
+                    }
+                }
+                stage("Test-Application") {
+                    steps {
+                        echo 'stubbed application'
+                        sh 'true'
+                    }
+                }
+            }
+        }
+        stage("Deploy-Stable") {
+            steps {
+                sh "make clean"
+                sh "./configure --prefix=$ROOT_INSTALL_PATH/stable/libfabric"
+                sh "make -j 12"
+                sh "make install"
+            }
+        }
+        stage("Deploy-Production") {
+            steps {
+                sh "make clean"
+                sh "./configure --prefix=$ROOT_INSTALL_PATH/production/libfabric"
+                sh "make -j 12"
+                sh "make install"
+            }
+        }
+    }
+    post {
+        always {
+            echo 'done'
+            dir('$TMP_INSTALL_DIR') {
+                deleteDir()
+            }
+        }
+        success {
+            echo 'build passed'
+        }
+    }
+    environment {
+      TMP_INSTALL_PATH = pwd tmp: true
+      ROOT_INSTALL_PATH = "/scratch/jenkins/install/"
+      FABTEST_PATH = "/scratch/jenkins/install/stable/fabtests"
+    }
+ }
