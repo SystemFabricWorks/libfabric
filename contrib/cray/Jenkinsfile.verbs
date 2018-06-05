@@ -175,7 +175,7 @@ pipeline {
     post {
         success {
             script {
-                pruneHashes "${env.LIBFABRIC_BUILD_PATH}, 10
+                pruneHashes "${env.LIBFABRIC_BUILD_PATH}, 15
 
                 try {
                     unstash 'rpms'
