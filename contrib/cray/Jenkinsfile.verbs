@@ -5,7 +5,7 @@
 // functions:
 //   -- launch
 //   -- publish
-@Library('CrayNetworkCI@master') _
+@Library('CrayNetworkCI@feature/pruneHashes') _
 
 pipeline {
     options {
@@ -39,7 +39,7 @@ pipeline {
                 sh 'test -e $OMB_BUILD_PATH/pt2pt/osu_bw'
             }
         }
-        stage('Build') {
+/*        stage('Build') {
             steps {
                 sh './autogen.sh'
                 sh './configure --prefix=$TMP_INSTALL_PATH'
@@ -158,7 +158,7 @@ pipeline {
                     publish env.LIBFABRIC_BUILD_PATH, "$BRANCH_NAME", "$GIT_SHORT_COMMIT"
                 }
             }
-        }
+        }*/
         stage("Deploy: RPMs") {
             when {
                 anyOf { expression { env.BRANCH_NAME == 'master' } ; buildingTag() }
@@ -175,6 +175,8 @@ pipeline {
     post {
         success {
             script {
+                pruneHashes "${env.LIBFABRIC_BUILD_PATH}", 15
+
                 try {
                     unstash 'rpms'
                     unstash 'sources'
