@@ -5,7 +5,7 @@
 // functions:
 //   -- launch
 //   -- publish
-@Library('CrayNetworkCI@master') _
+@Library('CrayNetworkCI@pruneHashes') _
 
 pipeline {
     options {
@@ -175,6 +175,8 @@ pipeline {
     post {
         success {
             script {
+                pruneHashes "${env.LIBFABRIC_BUILD_PATH}, 10
+
                 try {
                     unstash 'rpms'
                     unstash 'sources'
