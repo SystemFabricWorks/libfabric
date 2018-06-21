@@ -38,7 +38,7 @@ struct fi_tx_attr mrail_tx_attr = {
 	.comp_order 	= ~0x0ULL,
 	.inject_size 	= SIZE_MAX,
 	.size 		= SIZE_MAX,
-	.iov_limit 	= SIZE_MAX,
+	.iov_limit 	= MRAIL_IOV_LIMIT,
 	.rma_iov_limit 	= SIZE_MAX,
 };
 
@@ -72,7 +72,7 @@ struct fi_domain_attr mrail_domain_attr = {
 	.data_progress 		= FI_PROGRESS_AUTO,
 	.resource_mgmt 		= FI_RM_ENABLED,
 	.av_type 		= FI_AV_UNSPEC,
-	.mr_mode 		= FI_MR_BASIC | FI_MR_SCALABLE,
+	.mr_mode 		= FI_MR_BASIC | FI_MR_SCALABLE | FI_MR_RAW,
 	.mr_key_size		= SIZE_MAX,
 	.cq_data_size 		= SIZE_MAX,
 	.cq_cnt 		= SIZE_MAX,

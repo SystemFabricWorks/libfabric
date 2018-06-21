@@ -212,9 +212,9 @@ struct rxm_rma_iov_storage {
 enum rxm_buf_pool_type {
 	RXM_BUF_POOL_RX		= 0,
 	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
-	RXM_BUF_POOL_TX_MSG,
-	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX_MSG,
-	RXM_BUF_POOL_TX_TAGGED,
+	RXM_BUF_POOL_TX,
+	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
+	RXM_BUF_POOL_TX_INJECT,
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_LMT,
 	RXM_BUF_POOL_TX_SAR,
@@ -265,7 +265,7 @@ struct rxm_tx_buf {
 	enum rxm_buf_pool_type type;
 
 	/* Used for SAR protocol */
-	struct dlist_entry in_flight_entry;
+	struct rxm_tx_entry *tx_entry;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -287,7 +287,7 @@ struct rxm_tx_entry {
 	/* Must stay at top */
 	union {
 		struct fi_context fi_context;
-		struct dlist_entry postponed_entry;
+		struct dlist_entry deferred_entry;
 	};
 
 	enum rxm_proto_state state;
@@ -313,7 +313,9 @@ struct rxm_tx_entry {
 		struct {
 			size_t segs_left;
 			uint64_t msg_id;
-			struct dlist_entry in_flight_tx_buf_list;
+			/* The list for the TX buffers that have been 
+			 * queued until it would be possbile to send it  */
+			struct dlist_entry deferred_tx_buf_list;
 			struct rxm_iov rxm_iov;
 			uint64_t iov_offset;
 		};
@@ -335,7 +337,9 @@ struct rxm_recv_entry {
 	void *multi_recv_buf;
 	/* Used for SAR protocol */
 	struct {
+		struct dlist_entry sar_entry;
 		size_t total_recv_len;
+		uint64_t segs_left;
 		uint64_t msg_id;
 	};
 };
@@ -403,8 +407,9 @@ struct rxm_ep {
 struct rxm_conn {
 	struct fid_ep *msg_ep;
 	struct rxm_send_queue send_queue;
-	struct dlist_entry postponed_tx_list;
+	struct dlist_entry deferred_tx_list;
 	struct dlist_entry posted_rx_list;
+	struct dlist_entry sar_rx_msg_list;
 	struct util_cmap_handle handle;
 	/* This is saved MSG EP fid, that hasn't been closed during
 	 * handling of CONN_RECV in CMAP_CONNREQ_SENT for passive side */
@@ -423,17 +428,6 @@ extern struct fi_fabric_attr rxm_fabric_attr;
 extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;
 extern struct fi_rx_attr rxm_rx_attr;
-
-// TODO move to common code?
-static inline int rxm_match_addr(fi_addr_t recv_addr, fi_addr_t rx_addr)
-{
-	return (recv_addr == FI_ADDR_UNSPEC) || (recv_addr == rx_addr);
-}
-
-static inline int rxm_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
-{
-	return ((tag | ignore) == (match_tag | ignore));
-}
 
 #define rxm_ep_rx_flags(rxm_ep)	((rxm_ep)->util_ep.rx_op_flags)
 #define rxm_ep_tx_flags(rxm_ep)	((rxm_ep)->util_ep.tx_op_flags)
@@ -502,12 +496,12 @@ err:
 	return ret;
 }
 
-void rxm_ep_handle_postponed_tx_op(struct rxm_ep *rxm_ep,
+void rxm_ep_handle_deferred_tx_op(struct rxm_ep *rxm_ep,
+				  struct rxm_conn *rxm_conn,
+				  struct rxm_tx_entry *tx_entry);
+void rxm_ep_handle_deferred_rma_op(struct rxm_ep *rxm_ep,
 				   struct rxm_conn *rxm_conn,
 				   struct rxm_tx_entry *tx_entry);
-void rxm_ep_handle_postponed_rma_op(struct rxm_ep *rxm_ep,
-				    struct rxm_conn *rxm_conn,
-				    struct rxm_tx_entry *tx_entry);
 
 static inline void rxm_cntr_inc(struct util_cntr *cntr)
 {
@@ -572,7 +566,26 @@ rxm_process_recv_entry(struct rxm_recv_queue *recv_queue,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 		rx_buf->recv_entry = recv_entry;
 		recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
-		return rxm_cq_handle_rx_buf(rx_buf);
+		if (rx_buf->pkt.ctrl_hdr.type != ofi_ctrl_seg_data) {
+			return rxm_cq_handle_rx_buf(rx_buf);
+		} else {
+			int wait_last = (recv_entry->segs_left == 1);
+			ssize_t ret = rxm_cq_handle_rx_buf(rx_buf);
+			recv_queue->rxm_ep->res_fastlock_acquire(&recv_queue->lock);
+			while (!ret && rx_buf && !wait_last) {
+				rx_buf = rxm_check_unexp_msg_list(recv_queue, recv_entry->addr,
+								  recv_entry->tag, recv_entry->ignore);
+				if (rx_buf) {
+					assert(rx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data);
+					rx_buf->recv_entry = recv_entry;
+					dlist_remove(&rx_buf->unexp_msg.entry);
+					wait_last = (recv_entry->segs_left == 1);
+					ret = rxm_cq_handle_rx_buf(rx_buf);
+				}
+			}
+			recv_queue->rxm_ep->res_fastlock_release(&recv_queue->lock);
+			return ret;
+		}
 	}
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Enqueuing recv", recv_entry->addr,
@@ -635,8 +648,8 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 static inline struct rxm_tx_buf *
 rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
-	assert((type == RXM_BUF_POOL_TX_MSG) ||
-	       (type == RXM_BUF_POOL_TX_TAGGED) ||
+	assert((type == RXM_BUF_POOL_TX) ||
+	       (type == RXM_BUF_POOL_TX_INJECT) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
 	       (type == RXM_BUF_POOL_TX_LMT) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
@@ -646,13 +659,14 @@ rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 static inline void
 rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 {
-	assert((tx_buf->type == RXM_BUF_POOL_TX_MSG) ||
-	       (tx_buf->type == RXM_BUF_POOL_TX_TAGGED) ||
+	assert((tx_buf->type == RXM_BUF_POOL_TX) ||
+	       (tx_buf->type == RXM_BUF_POOL_TX_INJECT) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_ACK) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_LMT) ||
 	       (tx_buf->type == RXM_BUF_POOL_TX_SAR));
 	assert((tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_large_data) ||
+	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_seg_data) ||
 	       (tx_buf->pkt.ctrl_hdr.type == ofi_ctrl_ack));
 	tx_buf->pkt.hdr.flags &= ~FI_REMOTE_CQ_DATA;
 	rxm_buf_release(&rxm_ep->buf_pools[tx_buf->type],
@@ -727,6 +741,18 @@ rxm_ ## type ## _entry_release(struct rxm_ ## queue_type ## _queue *queue,	\
 
 RXM_DEFINE_QUEUE_ENTRY(tx, send);
 RXM_DEFINE_QUEUE_ENTRY(recv, recv);
+
+static inline void
+rxm_fill_tx_entry(void *context, uint8_t count, uint64_t flags,
+		  uint64_t comp_flags, struct rxm_tx_buf *tx_buf,
+		  struct rxm_tx_entry *tx_entry)
+{
+	tx_entry->context = context;
+	tx_entry->count = count;
+	tx_entry->flags = flags;
+	tx_entry->tx_buf = tx_buf;
+	tx_entry->comp_flags = comp_flags | FI_SEND;
+}
 
 static inline int rxm_finish_send_nobuf(struct rxm_tx_entry *tx_entry)
 {

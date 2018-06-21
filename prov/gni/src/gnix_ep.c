@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
+ * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -236,21 +236,8 @@ static void __fr_freelist_destroy(struct gnix_fid_ep *ep)
 	_gnix_fl_destroy(&ep->fr_freelist);
 }
 
-int _gnix_ep_enable(struct gnix_fid_ep *ep)
+int _gnix_ep_rx_enable(struct gnix_fid_ep *ep)
 {
-	/*
-	 * set enable flags and add nic to poll lists
-	 */
-
-	if (ep->send_cq) {
-		_gnix_cq_poll_obj_add(ep->send_cq, ep->nic,
-				      _gnix_nic_progress);
-		if (ep->cm_nic) /* No CM NIC for MSG EPs */
-			_gnix_cq_poll_obj_add(ep->send_cq, ep->cm_nic,
-					      _gnix_cm_nic_progress);
-		ep->tx_enabled = true;
-	}
-
 	if (ep->recv_cq) {
 		_gnix_cq_poll_obj_add(ep->recv_cq, ep->nic,
 				      _gnix_nic_progress);
@@ -258,38 +245,6 @@ int _gnix_ep_enable(struct gnix_fid_ep *ep)
 			_gnix_cq_poll_obj_add(ep->recv_cq, ep->cm_nic,
 					      _gnix_cm_nic_progress);
 		ep->rx_enabled = true;
-	}
-
-	if (ep->send_cntr) {
-		_gnix_cntr_poll_obj_add(ep->send_cntr, ep->nic,
-					_gnix_nic_progress);
-		if (ep->cm_nic) /* No CM NIC for MSG EPs */
-			_gnix_cntr_poll_obj_add(ep->send_cntr, ep->cm_nic,
-						_gnix_cm_nic_progress);
-	}
-
-	if (ep->recv_cntr) {
-		_gnix_cntr_poll_obj_add(ep->recv_cntr, ep->nic,
-					_gnix_nic_progress);
-		if (ep->cm_nic) /* No CM NIC for MSG EPs */
-			_gnix_cntr_poll_obj_add(ep->recv_cntr, ep->cm_nic,
-						_gnix_cm_nic_progress);
-	}
-
-	if (ep->write_cntr) {
-		_gnix_cntr_poll_obj_add(ep->write_cntr, ep->nic,
-					_gnix_nic_progress);
-		if (ep->cm_nic) /* No CM NIC for MSG EPs */
-			_gnix_cntr_poll_obj_add(ep->write_cntr, ep->cm_nic,
-						_gnix_cm_nic_progress);
-	}
-
-	if (ep->read_cntr) {
-		_gnix_cntr_poll_obj_add(ep->read_cntr, ep->nic,
-					_gnix_nic_progress);
-		if (ep->cm_nic) /* No CM NIC for MSG EPs */
-			_gnix_cntr_poll_obj_add(ep->read_cntr, ep->cm_nic,
-						_gnix_cm_nic_progress);
 	}
 
 	if (ep->rwrite_cntr) {
@@ -310,6 +265,46 @@ int _gnix_ep_enable(struct gnix_fid_ep *ep)
 
 	return FI_SUCCESS;
 }
+
+int _gnix_ep_tx_enable(struct gnix_fid_ep *ep)
+{
+
+	if (ep->send_cq) {
+		_gnix_cq_poll_obj_add(ep->send_cq, ep->nic,
+				      _gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cq_poll_obj_add(ep->send_cq, ep->cm_nic,
+					      _gnix_cm_nic_progress);
+		ep->tx_enabled = true;
+	}
+
+	if (ep->send_cntr) {
+		_gnix_cntr_poll_obj_add(ep->send_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->send_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
+
+	if (ep->write_cntr) {
+		_gnix_cntr_poll_obj_add(ep->write_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->write_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
+
+	if (ep->read_cntr) {
+		_gnix_cntr_poll_obj_add(ep->read_cntr, ep->nic,
+					_gnix_nic_progress);
+		if (ep->cm_nic) /* No CM NIC for MSG EPs */
+			_gnix_cntr_poll_obj_add(ep->read_cntr, ep->cm_nic,
+						_gnix_cm_nic_progress);
+	}
+
+	return FI_SUCCESS;
+}
+
 
 /*******************************************************************************
  * Forward declaration for ops structures
@@ -1566,10 +1561,18 @@ DIRECT_FN STATIC int gnix_ep_control(fid_t fid, int command, void *arg)
 			}
 		}
 
-		ret = _gnix_ep_enable(ep);
+		ret = _gnix_ep_tx_enable(ep);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			     "_gnix_ep_enable call returned %d\n",
+			     "_gnix_ep_tx_enable call returned %d\n",
+				ret);
+			goto err;
+		}
+
+		ret = _gnix_ep_rx_enable(ep);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			     "_gnix_ep_rx_enable call returned %d\n",
 				ret);
 			goto err;
 		}
@@ -2885,6 +2888,8 @@ DIRECT_FN STATIC ssize_t gnix_ep_cancel(fid_t fid, void *context)
 ssize_t gnix_cancel(fid_t fid, void *context)
 {
 	ssize_t ret;
+	struct gnix_fid_ep *ep;
+	struct gnix_fid_trx *trx_ep;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -2893,10 +2898,14 @@ ssize_t gnix_cancel(fid_t fid, void *context)
 		ret = gnix_ep_cancel(fid, context);
 		break;
 
-	/* not supported yet */
 	case FI_CLASS_RX_CTX:
-	case FI_CLASS_SRX_CTX:
 	case FI_CLASS_TX_CTX:
+		trx_ep = container_of(fid, struct gnix_fid_trx, ep_fid);
+		ep = trx_ep->ep;
+		ret = gnix_ep_cancel(&ep->ep_fid.fid, context);
+		break;
+	/* not supported yet */
+	case FI_CLASS_SRX_CTX:
 	case FI_CLASS_STX_CTX:
 		return -FI_ENOENT;
 

@@ -122,7 +122,7 @@ pipeline {
                         launch "ldd $OMB_BUILD_PATH/pt2pt/osu_latency", 1, 1
 
                         echo "checking potential hosts"
-                        launch "hostname", 4, 1
+                        launch "hostname", 16, 1
 
                         echo "running 2 process, 2 node latency test"
                         launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
@@ -138,6 +138,15 @@ pipeline {
 
                         echo "running 80 processes, 4 node Alltoall test"
                         launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
+
+                        echo "running 640 processes, 16 node Allreduce test"
+                        launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 640, 40
+
+                        echo "running 640 processes, 16 node Broadcast test"
+                        launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 640, 40
+
+                        echo "running 320 processes, 16 node Alltoall test"
+                        launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 320, 40
                     }
                 }
             }
