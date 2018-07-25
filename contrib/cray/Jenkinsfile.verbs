@@ -98,7 +98,7 @@ pipeline {
                             sh "gunzip ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS}"
                             sh "cp -r ${SFT_TEST_RESULTS_DIR} ."
                             archiveArtifacts artifacts: "${SFT_TEST_RESULTS_SUBDIR}/*"
-                            junit results: "${SFT_TEST_RESULTS_SUBDIR}/${SFT_TEST_RESULTS}", healthScaleFactor: 0.0
+                            junit testResults: "${SFT_TEST_RESULTS_SUBDIR}/${SFT_TEST_RESULTS}", healthScaleFactor: 0.0
                             sh "rm -rf ${SFT_TEST_RESULTS_DIR}"
                         }
                     }
