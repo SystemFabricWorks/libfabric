@@ -740,6 +740,25 @@ void rxm_buf_release(struct rxm_buf_pool *pool, struct rxm_buf *buf)
 	pool->rxm_ep->res_fastlock_release(&pool->lock);
 }
 
+static inline
+struct rxm_buf *rxm_buf_get_ts(struct rxm_buf_pool *pool)
+{
+	struct rxm_buf *buf;
+
+	fastlock_acquire(&pool->lock);
+	buf = util_buf_alloc(pool->pool);
+	fastlock_release(&pool->lock);
+	return buf;
+}
+
+static inline
+void rxm_buf_release_ts(struct rxm_buf_pool *pool, struct rxm_buf *buf)
+{
+	fastlock_acquire(&pool->lock);
+	util_buf_release(pool->pool, buf);
+	fastlock_release(&pool->lock);
+}
+
 static inline struct rxm_tx_buf *
 rxm_tx_buf_get(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
@@ -770,15 +789,15 @@ rxm_tx_buf_release(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 
 static inline struct rxm_rx_buf *rxm_rx_buf_get(struct rxm_ep *rxm_ep)
 {
-	return (struct rxm_rx_buf *)rxm_buf_get(
+	return (struct rxm_rx_buf *)rxm_buf_get_ts(
 			&rxm_ep->buf_pools[RXM_BUF_POOL_RX]);
 }
 
 static inline void
 rxm_rx_buf_release(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
-	rxm_buf_release(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
-			(struct rxm_buf *)rx_buf);
+	rxm_buf_release_ts(&rxm_ep->buf_pools[RXM_BUF_POOL_RX],
+			   (struct rxm_buf *)rx_buf);
 }
 
 static inline struct rxm_rma_buf *rxm_rma_buf_get(struct rxm_ep *rxm_ep)
@@ -889,4 +908,19 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 		return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, context,
 				    flags, len, buf, rx_buf->pkt.hdr.data,
 				    rx_buf->pkt.hdr.tag);
+}
+
+static inline void rxm_enqueue_rx_buf_for_repost(struct rxm_rx_buf *rx_buf)
+{
+	rx_buf->ep->res_fastlock_acquire(&rx_buf->ep->util_ep.lock);
+	dlist_insert_tail(&rx_buf->repost_entry, &rx_buf->ep->repost_ready_list);
+	rx_buf->ep->res_fastlock_release(&rx_buf->ep->util_ep.lock);
+}
+
+static inline void rxm_enqueue_rx_buf_for_repost_check(struct rxm_rx_buf *rx_buf)
+{
+	if (rx_buf->repost)
+		rxm_enqueue_rx_buf_for_repost(rx_buf);
+	else
+		rxm_rx_buf_release(rx_buf->ep, rx_buf);
 }
