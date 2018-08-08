@@ -163,6 +163,42 @@ pipeline {
                         launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
                     }
                 }
+                stage("MPI pt2pt: OSU mbw_mr") {
+                    steps {
+                        echo "running 8 process, 2 node mbw_mr test"
+                        launch "$OMB_BUILD_PATH/pt2pt/osu_mbw_mr", 8, 4
+                    }
+                }
+                stage("MPI one-sided: OSU get latency") {
+                    steps {
+                        echo "running 160 process, 4 node get latency test"
+                        launch "$OMB_BUILD_PATH/one-sided/osu_get_latency", 160, 40
+                    }
+                }
+                stage("MPI one-sided: OSU get bandwidth") {
+                    steps {
+                        echo "running 160 process, 4 node get bandwidth test"
+                        launch "$OMB_BUILD_PATH/one-sided/osu_get_bw", 160, 40
+                    }
+                }
+                stage("MPI one-sided: OSU put latency") {
+                    steps {
+                        echo "running 160 process, 4 node get latency test"
+                        launch "$OMB_BUILD_PATH/one-sided/osu_put_latency", 160, 40
+                    }
+                }
+                stage("MPI one-sided: OSU put bt") {
+                    steps {
+                        echo "running 160 process, 4 node get latency test"
+                        launch "$OMB_BUILD_PATH/one-sided/osu_put_bw", 160, 40
+                    }
+                }
+                stage("MPI one-sided: OSU put bibw") {
+                    steps {
+                        echo "running 80 process, 4 node get latency test"
+                        launch "$OMB_BUILD_PATH/one-sided/osu_put_bibw", 80, 20
+                    }
+                }
                 stage("MPI collective: OSU allreduce") {
                     steps {
                         echo "running 160 processes, 4 node Allreduce test"
