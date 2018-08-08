@@ -136,6 +136,7 @@ pipeline {
         stage("Test: Phase 2") {
             environment {
                 LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
+                MPIR_CVAR_OFI_USE_PROVIDER = 'verbs'
             }
             failFast true
             parallel {
@@ -144,45 +145,40 @@ pipeline {
                         echo 'placeholder'
                     }
                 }
-                stage("Application tests") {
-                    environment {
-                        MPIR_CVAR_OFI_USE_PROVIDER = 'verbs'
+                stage("LDD check") {
+                    steps {
+                        echo "checking ldd"
+                        launch "ldd $OMB_BUILD_PATH/pt2pt/osu_latency", 1, 1
                     }
-                    stage("LDD check") {
-                        steps {
-                            echo "checking ldd"
-                            launch "ldd $OMB_BUILD_PATH/pt2pt/osu_latency", 1, 1
-                        }
+                }
+                stage("OSU latency") {
+                    steps {
+                        echo "running 2 process, 2 node latency test"
+                        launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
                     }
-                    stage("OSU latency") {
-                        steps {
-                            echo "running 2 process, 2 node latency test"
-                            launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
-                        }
+                }
+                stage("OSU bandwidth") {
+                    steps {
+                        echo "running 2 process, 2 node bandwidth test"
+                        launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
                     }
-                    stage("OSU bandwidth") {
-                        steps {
-                            echo "running 2 process, 2 node bandwidth test"
-                            launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
-                        }
+                }
+                stage("OSU allreduce") {
+                    steps {
+                        echo "running 160 processes, 4 node Allreduce test"
+                        launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 160, 40
                     }
-                    stage("OSU allreduce") {
-                        steps {
-                            echo "running 160 processes, 4 node Allreduce test"
-                            launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 160, 40
-                        }
+                }
+                stage("OSU broadcast") {
+                    steps {
+                        echo "running 160 processes, 4 node Broadcast test"
+                        launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 160, 40
                     }
-                    stage("OSU broadcast") {
-                        steps {
-                            echo "running 160 processes, 4 node Broadcast test"
-                            launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 160, 40
-                        }
-                    }
-                    stage("OSU alltoall") {
-                        steps {
-                            echo "running 80 processes, 4 node Alltoall test"
-                            launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
-			}
+                }
+                stage("OSU alltoall") {
+                    steps {
+                        echo "running 80 processes, 4 node Alltoall test"
+                        launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
                     }
                 }
             }
