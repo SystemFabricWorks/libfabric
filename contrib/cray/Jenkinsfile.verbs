@@ -211,7 +211,7 @@ pipeline {
                         launch "$OMB_BUILD_PATH/collective/osu_gather -f", 160, 40
                     }
                 }
-                stage("MPI collective: OSU gather") {
+                stage("MPI collective: OSU gatherv") {
                     steps {
                         echo "running 160 processes, 4 node Gatherv test"
                         launch "$OMB_BUILD_PATH/collective/osu_gatherv -f", 160, 40
