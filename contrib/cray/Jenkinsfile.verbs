@@ -182,6 +182,7 @@ pipeline {
                         steps {
                             echo "running 80 processes, 4 node Alltoall test"
                             launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
+			}
                     }
                 }
             }
