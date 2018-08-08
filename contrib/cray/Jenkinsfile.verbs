@@ -151,34 +151,160 @@ pipeline {
                         launch "ldd $OMB_BUILD_PATH/pt2pt/osu_latency", 1, 1
                     }
                 }
-                stage("OSU latency") {
+                stage("MPI pt2pt: OSU latency") {
                     steps {
                         echo "running 2 process, 2 node latency test"
                         launch "$OMB_BUILD_PATH/pt2pt/osu_latency", 2, 1
                     }
                 }
-                stage("OSU bandwidth") {
+                stage("MPI pt2pt: OSU bandwidth") {
                     steps {
                         echo "running 2 process, 2 node bandwidth test"
                         launch "$OMB_BUILD_PATH/pt2pt/osu_bw", 2, 1
                     }
                 }
-                stage("OSU allreduce") {
+                stage("MPI collective: OSU allreduce") {
                     steps {
                         echo "running 160 processes, 4 node Allreduce test"
                         launch "$OMB_BUILD_PATH/collective/osu_allreduce -f", 160, 40
                     }
                 }
-                stage("OSU broadcast") {
+                stage("MPI collective: OSU allgather") {
+                    steps {
+                        echo "running 160 processes, 4 node Allgather test"
+                        launch "$OMB_BUILD_PATH/collective/osu_allgather -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU allgatherv") {
+                    steps {
+                        echo "running 160 processes, 4 node Allgatherv test"
+                        launch "$OMB_BUILD_PATH/collective/osu_allgatherv -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU alltoall") {
+                    steps {
+                        echo "running 80 processes, 4 node Alltoall test"
+                        launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 20
+                    }
+                }
+                stage("MPI collective: OSU alltoallv") {
+                    steps {
+                        echo "running 80 processes, 4 node Alltoallv test"
+                        launch "$OMB_BUILD_PATH/collective/osu_alltoallv -f", 80, 20
+                    }
+                }
+                stage("MPI collective: OSU barrier") {
+                    steps {
+                        echo "running 160 processes, 4 node Barrier test"
+                        launch "$OMB_BUILD_PATH/collective/osu_barrier -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU broadcast") {
                     steps {
                         echo "running 160 processes, 4 node Broadcast test"
                         launch "$OMB_BUILD_PATH/collective/osu_bcast -f", 160, 40
                     }
                 }
-                stage("OSU alltoall") {
+                stage("MPI collective: OSU gather") {
                     steps {
-                        echo "running 80 processes, 4 node Alltoall test"
-                        launch "$OMB_BUILD_PATH/collective/osu_alltoall -f", 80, 40
+                        echo "running 160 processes, 4 node Gather test"
+                        launch "$OMB_BUILD_PATH/collective/osu_gather -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU gather") {
+                    steps {
+                        echo "running 160 processes, 4 node Gatherv test"
+                        launch "$OMB_BUILD_PATH/collective/osu_gatherv -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU iallgather") {
+                    steps {
+                        echo "running 160 processes, 4 node IAllgather test"
+                        launch "$OMB_BUILD_PATH/collective/osu_iallgather -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU iallgatherv") {
+                    steps {
+                        echo "running 160 processes, 4 node IAllgatherv test"
+                        launch "$OMB_BUILD_PATH/collective/osu_iallgatherv -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU ialltoall") {
+                    steps {
+                        echo "running 80 processes, 4 node IAlltoall test"
+                        launch "$OMB_BUILD_PATH/collective/osu_ialltoall -f", 80, 20
+                    }
+                }
+                stage("MPI collective: OSU ialltoallv") {
+                    steps {
+                        echo "running 80 processes, 4 node IAlltoallv test"
+                        launch "$OMB_BUILD_PATH/collective/osu_ialltoallv -f", 80, 20
+                    }
+                }
+                stage("MPI collective: OSU ialltoallw") {
+                    steps {
+                        echo "running 80 processes, 4 node IAlltoallw test"
+                        launch "$OMB_BUILD_PATH/collective/osu_ialltoallw -f", 80, 20
+                    }
+                }
+                stage("MPI collective: OSU ibarrier") {
+                    steps {
+                        echo "running 160 processes, 4 node IBarrier test"
+                        launch "$OMB_BUILD_PATH/collective/osu_ibarrier -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU ibcast") {
+                    steps {
+                        echo "running 160 processes, 4 node IBroadcast test"
+                        launch "$OMB_BUILD_PATH/collective/osu_ibcast -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU igather") {
+                    steps {
+                        echo "running 160 processes, 4 node Igather test"
+                        launch "$OMB_BUILD_PATH/collective/osu_igather -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU igatherv") {
+                    steps {
+                        echo "running 160 processes, 4 node IGatherv test"
+                        launch "$OMB_BUILD_PATH/collective/osu_igatherv -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU iscatter") {
+                    steps {
+                        echo "running 160 processes, 4 node IScatter test"
+                        launch "$OMB_BUILD_PATH/collective/osu_iscatter -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU iscatterv") {
+                    steps {
+                        echo "running 160 processes, 4 node IScatterv test"
+                        launch "$OMB_BUILD_PATH/collective/osu_iscatterv -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU reduce") {
+                    steps {
+                        echo "running 160 processes, 4 node Reduce test"
+                        launch "$OMB_BUILD_PATH/collective/osu_reduce -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU reduce_scatter") {
+                    steps {
+                        echo "running 160 processes, 4 node Reduce/Scatter test"
+                        launch "$OMB_BUILD_PATH/collective/osu_reduce_scatter -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU scatter") {
+                    steps {
+                        echo "running 160 processes, 4 node Scatter test"
+                        launch "$OMB_BUILD_PATH/collective/osu_scatter -f", 160, 40
+                    }
+                }
+                stage("MPI collective: OSU Scatterv") {
+                    steps {
+                        echo "running 160 processes, 4 node Scatterv test"
+                        launch "$OMB_BUILD_PATH/collective/osu_scatterv -f", 160, 40
                     }
                 }
             }
