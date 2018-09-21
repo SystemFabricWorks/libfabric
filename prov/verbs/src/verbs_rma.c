@@ -58,6 +58,9 @@ fi_ibv_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = VERBS_INJECT(ep, len) | VERBS_COMP(ep),
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
@@ -75,6 +78,9 @@ fi_ibv_msg_ep_rma_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	return fi_ibv_send_iov(ep, &wr, iov, desc, count);
@@ -90,6 +96,9 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.wr_id = (uintptr_t)msg->context,
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
 		.wr.rdma.rkey = (uint32_t)msg->rma_iov->key,
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	if (flags & FI_REMOTE_CQ_DATA) {
@@ -115,6 +124,9 @@ fi_ibv_msg_ep_rma_read(struct fid_ep *ep_fid, void *buf, size_t len,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = VERBS_COMP_READ(ep),
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
@@ -134,6 +146,9 @@ fi_ibv_msg_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **d
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = VERBS_COMP_READ(ep),
 		.num_sge = count,
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	fi_ibv_set_sge_iov(wr.sg_list, iov, count, desc);
@@ -154,6 +169,9 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.wr.rdma.rkey = (uint32_t)msg->rma_iov->key,
 		.send_flags = VERBS_COMP_READ_FLAGS(ep, flags),
 		.num_sge = msg->iov_count,
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	fi_ibv_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
@@ -175,6 +193,9 @@ fi_ibv_msg_ep_rma_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = VERBS_INJECT(ep, len) | VERBS_COMP(ep),
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	return fi_ibv_send_buf(ep, &wr, buf, len, desc);
@@ -192,6 +213,9 @@ fi_ibv_msg_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t le
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = IBV_SEND_INLINE,
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
@@ -207,6 +231,9 @@ fi_ibv_rma_write_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep->wrs->rma_wr.wr.rdma.remote_addr = addr;
 	ep->wrs->rma_wr.wr.rdma.rkey = (uint32_t) key;
+#ifdef INCLUDE_VERBS_XRC
+	ep->wrs->rma_wr.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 
 	ep->wrs->sge.addr = (uintptr_t) buf;
 	ep->wrs->sge.length = (uint32_t) len;
@@ -228,6 +255,9 @@ fi_ibv_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
 		.send_flags = IBV_SEND_INLINE,
+#ifdef INCLUDE_VERBS_XRC
+		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 	};
 
 	return fi_ibv_send_buf_inline(ep, &wr, buf, len);
@@ -243,6 +273,9 @@ fi_ibv_msg_ep_rma_inject_writedata_fast(struct fid_ep *ep_fid, const void *buf, 
 		container_of(ep_fid, struct fi_ibv_ep, util_ep.ep_fid);
 	ep->wrs->rma_wr.wr.rdma.remote_addr = addr;
 	ep->wrs->rma_wr.wr.rdma.rkey = (uint32_t) key;
+#ifdef INCLUDE_VERBS_XRC
+	ep->wrs->rma_wr.qp_type.xrc.remote_srqn = ep->peer_srqn,
+#endif
 
 	ep->wrs->rma_wr.imm_data = htonl((uint32_t) data);
 	ep->wrs->rma_wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;

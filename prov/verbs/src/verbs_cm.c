@@ -194,6 +194,47 @@ fi_ibv_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	return 0;
 }
 
+static void *fi_ibv_msg_alloc_xrc_params(const void *param, size_t *paramlen)
+{
+	struct fi_ibv_xrc_cm_data *cm_data;
+	size_t cm_datalen = sizeof(*cm_data) + *paramlen;
+
+	if (cm_datalen > FI_IBV_CM_DATA_SIZE) {
+		VERBS_WARN(FI_LOG_EP_CTRL, "XRC CM private data overflow\n");
+		errno = FI_EINVAL;
+		return NULL;
+	}
+
+	cm_data = malloc(cm_datalen);
+	if (!cm_data) {
+		errno = FI_ENOMEM;
+		return NULL;
+	}
+	if (paramlen)
+		memcpy((cm_data + 1), param, *paramlen);
+	*paramlen = cm_datalen;
+	return cm_data;
+}
+
+static int
+fi_ibv_msg_xrc_ep_reject(struct fi_ibv_connreq *connreq,
+			 const void *param, size_t paramlen)
+{
+	struct fi_ibv_xrc_cm_data *cm_data;
+	int ret;
+
+	cm_data = fi_ibv_msg_alloc_xrc_params(param, &paramlen);
+	if (!cm_data)
+		return -errno;
+
+	fi_ibv_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
+			       connreq->xrc.conn_tag, connreq->xrc.port, 0);
+	ret = rdma_reject(connreq->id, cm_data,
+			  (uint8_t) paramlen) ? -errno : 0;
+	free(cm_data);
+	return ret;
+}
+
 static int
 fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 		  const void *param, size_t paramlen)
@@ -202,7 +243,11 @@ fi_ibv_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	int ret;
 
 	connreq = container_of(handle, struct fi_ibv_connreq, handle);
-	ret = rdma_reject(connreq->id, param, (uint8_t) paramlen) ? -errno : 0;
+	if (fi_ibv_using_xrc())
+		ret = fi_ibv_msg_xrc_ep_reject(connreq, param, paramlen);
+	else
+		ret = rdma_reject(connreq->id, param,
+				  (uint8_t) paramlen) ? -errno : 0;
 	free(connreq);
 	return ret;
 }
@@ -222,6 +267,90 @@ struct fi_ops_cm fi_ibv_msg_ep_cm_ops = {
 	.connect = fi_ibv_msg_ep_connect,
 	.listen = fi_no_listen,
 	.accept = fi_ibv_msg_ep_accept,
+	.reject = fi_no_reject,
+	.shutdown = fi_ibv_msg_ep_shutdown,
+	.join = fi_no_join,
+};
+
+#ifdef INCLUDE_VERBS_XRC
+
+static int
+fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
+		   const void *param, size_t paramlen)
+{
+	struct sockaddr *dst_addr;
+	void *adjusted_param;
+	struct fi_ibv_ep *_ep = container_of(ep, struct fi_ibv_ep,
+					     util_ep.ep_fid);
+	int ret;
+
+	if (!_ep->srqn) {
+		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
+		if (ret)
+			return ret;
+	}
+	adjusted_param = fi_ibv_msg_alloc_xrc_params(param, &paramlen);
+	if (!adjusted_param)
+		return -errno;
+
+	dst_addr = rdma_get_peer_addr(_ep->id);
+	ret = fi_ibv_connect_xrc(_ep, dst_addr, 0, adjusted_param, paramlen);
+	free(adjusted_param);
+	return ret;
+}
+
+static int
+fi_ibv_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+{
+	void *adjusted_param;
+	struct fi_ibv_ep *_ep =
+		container_of(ep, struct fi_ibv_ep, util_ep.ep_fid);
+	int ret;
+
+	if (!_ep->srqn) {
+		ret = ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
+		if (ret)
+			return ret;
+	}
+
+	adjusted_param = fi_ibv_msg_alloc_xrc_params(param, &paramlen);
+	if (!adjusted_param)
+		return -errno;
+
+	ret = fi_ibv_accept_xrc(_ep, 0, adjusted_param, paramlen);
+	free(adjusted_param);
+	return ret;
+}
+
+#else /* INCLUDE_VERBS_XRC */
+
+static int
+fi_ibv_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
+		   const void *param, size_t paramlen)
+{
+	/* Should not be callable if XRC is not enabled */
+	assert(0);
+	return -FI_ENOSYS;
+}
+
+static int
+fi_ibv_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+{
+	/* Should not be callable if XRC is not enabled */
+	assert(0);
+	return -FI_ENOSYS;
+}
+
+#endif /* INCLUDE_VERBS_XRC */
+
+struct fi_ops_cm fi_ibv_msg_xrc_ep_cm_ops = {
+	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_ibv_msg_ep_setname,
+	.getname = fi_ibv_msg_ep_getname,
+	.getpeer = fi_ibv_msg_ep_getpeer,
+	.connect = fi_ibv_msg_xrc_ep_connect,
+	.listen = fi_no_listen,
+	.accept = fi_ibv_msg_xrc_ep_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_ibv_msg_ep_shutdown,
 	.join = fi_no_join,

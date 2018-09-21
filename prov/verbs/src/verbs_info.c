@@ -410,16 +410,21 @@ static inline int fi_ibv_get_qp_cap(struct ibv_context *ctx,
 		goto err1;
 	}
 
-	qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
-			    IBV_QPT_RC : IBV_QPT_UD;
+	if (fi_ibv_using_xrc() && info->ep_attr->type == FI_EP_MSG)
+		qp_type = IBV_QPT_XRC_SEND;
+	else
+		qp_type = (info->ep_attr->type != FI_EP_DGRAM) ?
+				    IBV_QPT_RC : IBV_QPT_UD;
 
 	memset(&init_attr, 0, sizeof init_attr);
 	init_attr.send_cq = cq;
-	init_attr.recv_cq = cq;
 	init_attr.cap.max_send_wr = fi_ibv_gl_data.def_tx_size;
-	init_attr.cap.max_recv_wr = fi_ibv_gl_data.def_rx_size;
 	init_attr.cap.max_send_sge = fi_ibv_gl_data.def_tx_iov_limit;
-	init_attr.cap.max_recv_sge = fi_ibv_gl_data.def_rx_iov_limit;
+	if (qp_type != IBV_QPT_XRC_SEND) {
+		init_attr.recv_cq = cq;
+		init_attr.cap.max_recv_wr = fi_ibv_gl_data.def_rx_size;
+		init_attr.cap.max_recv_sge = fi_ibv_gl_data.def_rx_iov_limit;
+	}
 	init_attr.cap.max_inline_data = fi_ibv_find_max_inline(pd, ctx, qp_type);
 	init_attr.qp_type = qp_type;
 
@@ -473,6 +478,14 @@ static int fi_ibv_get_device_attrs(struct ibv_context *ctx,
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC,
 				 "ibv_query_device", errno);
 		return -errno;
+	}
+
+	if (fi_ibv_using_xrc()) {
+		if (info->ep_attr->type == FI_EP_MSG &&
+		    !(device_attr.device_cap_flags & IBV_DEVICE_XRC)) {
+			VERBS_WARN(FI_LOG_FABRIC, "XRC not supported\n");
+			return -FI_EINVAL;
+		}
 	}
 
 	info->domain_attr->cq_cnt 		= device_attr.max_cq;
@@ -1019,7 +1032,12 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
-	int ret = 0, i, num_devices;
+	const struct verbs_ep_domain *ep_type[] = {
+		&verbs_msg_domain,
+		&verbs_dgram_domain,
+		NULL,
+	};
+	int ret = 0, i, j, num_devices;
 
 	*all_infos = NULL;
 
@@ -1050,18 +1068,13 @@ int fi_ibv_init_info(const struct fi_info **all_infos)
 	}
 
 	for (i = 0; i < num_devices; i++) {
-		ret = fi_ibv_alloc_info(ctx_list[i], &fi, &verbs_msg_domain);
-		if (!ret) {
-			if (!*all_infos)
-				*all_infos = fi;
-			else
-				tail->next = fi;
-			tail = fi;
-
-			ret = fi_ibv_alloc_info(ctx_list[i], &fi,
-						&verbs_dgram_domain);
+		for (j = 0; ep_type[j]; j++) {
+			ret = fi_ibv_alloc_info(ctx_list[i], &fi, ep_type[j]);
 			if (!ret) {
-				tail->next = fi;
+				if (!*all_infos)
+					*all_infos = fi;
+				else
+					tail->next = fi;
 				tail = fi;
 			}
 		}

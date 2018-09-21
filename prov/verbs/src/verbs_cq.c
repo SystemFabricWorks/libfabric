@@ -486,6 +486,14 @@ static int fi_ibv_cq_close(fid_t fid)
 		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	if (cq->xrc_srq_ep) {
+		ret = ibv_destroy_srq(cq->xrc_srq_ep->srq);
+		if (ret) {
+			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+			return -ret;
+		}
+		cq->xrc_srq_ep->srq = NULL;
+	}
 	while (!slist_empty(&cq->wcq)) {
 		entry = slist_remove_head(&cq->wcq);
 		wce = container_of(entry, struct fi_ibv_wce, entry);

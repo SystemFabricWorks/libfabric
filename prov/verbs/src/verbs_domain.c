@@ -254,6 +254,11 @@ static int fi_ibv_domain_close(fid_t fid)
 			ofi_ns_stop_server(&fab->name_server);
 		break;
 	case FI_EP_MSG:
+		if (domain->use_xrc) {
+			ret = fi_ibv_domain_xrc_cleanup(domain);
+			if (ret)
+				return ret;
+		}
 		break;
 	default:
 		/* Never should go here */
@@ -374,6 +379,24 @@ static void fi_ibv_domain_process_exp(struct fi_ibv_domain *domain)
 	domain->use_odp = fi_ibv_gl_data.use_odp;
 }
 
+static int fi_ibv_domain_check_xrc(struct fi_ibv_domain *domain)
+{
+	struct ibv_device_attr attr;
+	int ret;
+
+	domain->use_xrc = 0;
+
+	if (domain->ep_type != FI_EP_MSG || !fi_ibv_using_xrc())
+		return 0;
+
+	ret = ibv_query_device(domain->verbs, &attr);
+	if (ret || !(attr.device_cap_flags & IBV_DEVICE_XRC)) {
+		VERBS_INFO(FI_LOG_DOMAIN, "XRC is not supported");
+		return -FI_EINVAL;
+	}
+	return fi_ibv_domain_xrc_init(domain);
+}
+
 static int
 fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 	      struct fid_domain **domain, void *context)
@@ -466,6 +489,9 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->util_domain.domain_fid.ops = &fi_ibv_dgram_domain_ops;
 		break;
 	case FI_EP_MSG:
+		ret = fi_ibv_domain_check_xrc(_domain);
+		if (ret)
+			goto err5;
 		_domain->util_domain.domain_fid.ops = &fi_ibv_msg_domain_ops;
 		break;
 	default:
@@ -477,6 +503,9 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
+err5:
+	if (fi_ibv_gl_data.mr_cache_enable)
+		ofi_mr_cache_cleanup(&_domain->cache);
 err4:
 	if (fi_ibv_gl_data.mr_cache_enable)
 		ofi_monitor_cleanup(&_domain->monitor);
