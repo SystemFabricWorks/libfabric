@@ -81,11 +81,10 @@ pipeline {
             environment {
                 LD_LIBRARY_PATH = "$TMP_INSTALL_PATH/lib:$LD_LIBRARY_PATH"
                 SFT_BIN = "${ROOT_BUILD_PATH + '/libfabric-sft/stable/bin'}"
-                SFT_ADD_ARGS = "--additional-args '--dbg-cq-retry 1 --dbg-cq-delay 5'"
-//                SFT_ADD_ARGS = " "
+//                SFT_ADD_ARGS = "--additional-args ' '"
+                SFT_ADD_ARGS = " "
                 SFT_MAX_JOB_TIME = '3'
                 SFT_NUM_JOBS = '4'
-//                SFT_PARTITION = '--partition mellanox'
                 SFT_PARTITION = ' '
                 SFT_PROVIDER = 'verbs;ofi_rxm'
                 SFT_BASELINE_DIR = "contrib/cray/"
