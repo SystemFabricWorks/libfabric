@@ -62,7 +62,7 @@
 #define RXM_MINOR_VERSION 0
 
 #define RXM_OP_VERSION		3
-#define RXM_CTRL_VERSION	3
+#define RXM_CTRL_VERSION	4
 
 #define RXM_BUF_SIZE	16384
 
@@ -136,7 +136,7 @@ struct rxm_ep_wire_proto {
 	uint8_t	ctrl_version;
 	uint8_t	op_version;
 	uint8_t endianness;
-	uint8_t padding[6];
+	uint8_t padding[5];
 	uint64_t eager_size;
 };
 
