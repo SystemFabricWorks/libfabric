@@ -81,6 +81,15 @@ AC_ARG_ENABLE([direct],
 	[],
 	[enable_direct=no])
 
+AC_ARG_WITH([verbs-xrc],
+    AC_HELP_STRING([--with-verbs-xrc],
+		   [Enable Verbs XRC transport support @<:@default=no@:>@]))
+
+if test "$with_verbs_xrc" != "" && test "$with_verbs_xrc" != "no"; then
+	AC_DEFINE([INCLUDE_VERBS_XRC], 1,
+		  [Define to 1 to enable Verbs XRC transport support])
+fi
+
 dnl Checks for programs
 AC_PROG_CC_C99
 AM_PROG_CC_C_O
