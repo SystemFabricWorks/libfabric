@@ -188,7 +188,10 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 		/* Remove the following caps if they are not requested as they
 		 * may affect performance in fast-path */
 		if (!hints) {
-			cur->caps &= ~(FI_DIRECTED_RECV | FI_SOURCE);
+			cur->caps &= ~(FI_DIRECTED_RECV | FI_SOURCE |
+				       FI_ATOMIC);
+			cur->tx_attr->caps &= ~FI_ATOMIC;
+			cur->rx_attr->caps &= ~FI_ATOMIC;
 			cur->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		} else {
 			if (!(hints->caps & FI_DIRECTED_RECV))
@@ -198,6 +201,21 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 
 			if (hints->mode & FI_BUFFERED_RECV)
 				cur->mode |= FI_BUFFERED_RECV;
+
+			if (hints->caps & FI_ATOMIC) {
+				cur->tx_attr->msg_order &= ~(FI_ORDER_RAR |
+						FI_ORDER_RAW | FI_ORDER_WAR |
+						FI_ORDER_WAW | FI_ORDER_SAR |
+						FI_ORDER_SAW);
+				cur->rx_attr->msg_order &= ~(FI_ORDER_RAR |
+						FI_ORDER_RAW | FI_ORDER_WAR |
+						FI_ORDER_WAW | FI_ORDER_SAR |
+						FI_ORDER_SAW);
+			} else {
+				cur->caps &= ~FI_ATOMIC;
+				cur->tx_attr->caps &= ~FI_ATOMIC;
+				cur->rx_attr->caps &= ~FI_ATOMIC;
+			}
 
 			if (!ofi_mr_local(hints)) {
 				cur->mode &= ~FI_LOCAL_MR;

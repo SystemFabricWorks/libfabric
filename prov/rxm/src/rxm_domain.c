@@ -70,7 +70,7 @@ static struct fi_ops_domain rxm_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
-	.query_atomic = fi_no_query_atomic,
+	.query_atomic = rxm_ep_query_atomic,
 };
 
 static void rxm_mr_remove_map_entry(struct rxm_mr *mr)
@@ -329,6 +329,9 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	 * and bounds validation. We turn off the map mode bit FI_MR_PROV_KEY
 	 * since we specify the key used by MSG_EP provider. */
 	rxm_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
+
+	rxm_domain->max_atomic_size = info->tx_attr ?
+				      info->tx_attr->inject_size : 0;
 
 	*domain = &rxm_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxm_domain_fi_ops;
