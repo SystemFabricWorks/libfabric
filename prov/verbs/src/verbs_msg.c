@@ -246,7 +246,7 @@ fi_ibv_msg_xrc_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint6
 						base_ep.util_ep.ep_fid);
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)msg->context,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+		FI_IBV_SET_REMOTE_SRQN(ep->peer_srqn)
 	};
 
 	if (flags & FI_REMOTE_CQ_DATA) {
@@ -269,7 +269,7 @@ fi_ibv_msg_xrc_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.wr_id = VERBS_COMP(&ep->base_ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND,
 		.send_flags = VERBS_INJECT(&ep->base_ep, len),
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+		FI_IBV_SET_REMOTE_SRQN(ep->peer_srqn)
 	};
 
 	return fi_ibv_send_buf(&ep->base_ep, &wr, buf, len, desc);
@@ -286,7 +286,7 @@ fi_ibv_msg_xrc_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
 		.send_flags = VERBS_INJECT(&ep->base_ep, len),
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+		FI_IBV_SET_REMOTE_SRQN(ep->peer_srqn)
 	};
 
 	return fi_ibv_send_buf(&ep->base_ep, &wr, buf, len, desc);
@@ -301,7 +301,7 @@ fi_ibv_msg_xrc_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **d
 	struct ibv_send_wr wr = {
 		.wr_id = (uintptr_t)context,
 		.opcode = IBV_WR_SEND,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+		FI_IBV_SET_REMOTE_SRQN(ep->peer_srqn)
 	};
 
 	return fi_ibv_send_iov(&ep->base_ep, &wr, iov, desc, count);
@@ -316,7 +316,7 @@ static ssize_t fi_ibv_msg_xrc_ep_inject(struct fid_ep *ep_fid, const void *buf, 
 		.wr_id = VERBS_NO_COMP_FLAG,
 		.opcode = IBV_WR_SEND,
 		.send_flags = IBV_SEND_INLINE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+		FI_IBV_SET_REMOTE_SRQN(ep->peer_srqn)
 	};
 
 	return fi_ibv_send_buf_inline(&ep->base_ep, &wr, buf, len);
@@ -332,7 +332,7 @@ static ssize_t fi_ibv_msg_xrc_ep_injectdata(struct fid_ep *ep_fid, const void *b
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
 		.send_flags = IBV_SEND_INLINE,
-		.qp_type.xrc.remote_srqn = ep->peer_srqn,
+		FI_IBV_SET_REMOTE_SRQN(ep->peer_srqn)
 	};
 
 	return fi_ibv_send_buf_inline(&ep->base_ep, &wr, buf, len);
