@@ -91,11 +91,11 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 	core_info->mode |= FI_RX_CQ_DATA | FI_CONTEXT;
 
 	if (hints) {
-		if (hints->caps & FI_TAGGED)
+		if (hints->caps & (FI_MSG | FI_ATOMIC | FI_TAGGED))
 			core_info->caps |= FI_MSG;
 
 		/* FI_RMA cap is needed for large message transfer protocol */
-		if (hints->caps & (FI_MSG | FI_TAGGED))
+		if (hints->caps & (FI_RMA | FI_MSG | FI_ATOMIC | FI_TAGGED))
 			core_info->caps |= FI_RMA;
 
 		if (hints->domain_attr) {
