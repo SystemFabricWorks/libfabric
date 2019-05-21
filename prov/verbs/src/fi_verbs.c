@@ -620,10 +620,20 @@ static int fi_ibv_read_params(void)
 
 static void fi_ibv_fini(void)
 {
+	int fd;
+
 #if HAVE_VERBS_DL
 	ofi_monitor_cleanup();
 	ofi_mem_fini();
 #endif
+	/* If an XRC domain i-node has been created and is no longer
+	 * being used by any process, remove it */
+	fd = open(fi_ibv_gl_data.msg.xrcd_filename, O_EXCL, 0);
+	if (fd >= 0) {
+		unlink(fi_ibv_gl_data.msg.xrcd_filename);
+		close(fd);
+	}
+
 	fi_freeinfo((void *)fi_ibv_util_prov.info);
 	fi_ibv_util_prov.info = NULL;
 }
