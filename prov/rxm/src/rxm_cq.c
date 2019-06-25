@@ -1384,6 +1384,14 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 				buf, repost_entry);
 
 		/* Discard rx buffer if its msg_ep was closed */
+		if (!buf->conn) {
+			assert(buf->ep->srx_ctx);
+			buf->conn = rxm_key2conn(buf->ep,
+						 buf->pkt.ctrl_hdr.conn_id);
+			if (OFI_UNLIKELY(!buf->conn))
+				continue;
+		}
+
 		if (!buf->conn->msg_ep) {
 			ofi_buf_free(&buf->hdr);
 			continue;
