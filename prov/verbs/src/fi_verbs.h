@@ -471,6 +471,7 @@ struct fi_ibv_ini_shared_conn {
 	 * same remote peer and TGT QPN will share this connection, with
 	 * the remote end opening the specified XRC TGT QPN for sharing. */
 	enum fi_ibv_ini_qp_state	state;
+	struct rdma_cm_id		*phys_conn_id;
 	struct ibv_qp			*ini_qp;
 	uint32_t			tgt_qpn;
 
