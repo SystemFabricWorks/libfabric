@@ -1,7 +1,7 @@
 // Copyright (c) 2018. Cray Inc. All rights reserved.
 // Libfabric Verbs provider Jenkins Pipeline file
 
-@Library(['CrayNetworkCI@master', 'dst-shared@master']) _
+@Library(['CrayNetworkCI@feature/credential', 'dst-shared@master']) _
 
 pipeline {
     options {
@@ -395,8 +395,10 @@ pipeline {
                     // publishes the source RPM to DST's Artifactory instance
                     transfer(artifactName: '/tmp/libfabric-source.tar.gz')
 
+		    sh 'python contrib/cray/triggerBuild.py -u url -H hash -b branch -j build-libfabric-verbs -c jenkinsBuildCredential()'
+
                     // Sends event to message bus to notify other builds
-                    publishEvents(["os-networking-libfabric-verbs-publish"])
+                    // publishEvents(["os-networking-libfabric-verbs-publish"])
                 }
             }
         }
