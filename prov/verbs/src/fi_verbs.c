@@ -213,7 +213,8 @@ int fi_ibv_create_ep(const char *node, const char *service,
 
 	ret = rdma_create_ep(id, _rai, NULL, NULL);
 	if (ret) {
-		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_ep", errno);
+		VERBS_WARN(FI_LOG_EP_CTRL, "rdma_create_ep error %s",
+			  strerror(errno));
 		ret = -errno;
 		goto err1;
 	}
