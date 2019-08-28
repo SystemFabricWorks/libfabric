@@ -683,19 +683,19 @@ fi_ibv_eq_cm_process_event(struct fi_ibv_eq *eq,
 			fastlock_acquire(&eq->lock);
 			fi_ibv_eq_xrc_disconnect_event(eq, cma_event, acked);
 			fastlock_release(&eq->lock);
-			return -FI_EAGAIN;
 		}
-		*event = FI_SHUTDOWN;
-		entry->info = NULL;
-		break;
+		return -FI_EAGAIN;
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
 		ep = container_of(fid, struct fi_ibv_ep, util_ep.ep_fid);
 		if (fi_ibv_is_xrc(ep->info)) {
 			fastlock_acquire(&eq->lock);
 			fi_ibv_eq_xrc_timewait_event(eq, cma_event, acked);
 			fastlock_release(&eq->lock);
+			return -FI_EAGAIN;
 		}
-		return -FI_EAGAIN;
+		*event = FI_SHUTDOWN;
+		entry->info = NULL;
+		break;
 	case RDMA_CM_EVENT_ADDR_ERROR:
 	case RDMA_CM_EVENT_ROUTE_ERROR:
 	case RDMA_CM_EVENT_CONNECT_ERROR:
