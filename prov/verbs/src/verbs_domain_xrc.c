@@ -33,7 +33,13 @@
 #include "config.h"
 #include "fi_verbs.h"
 #include <sys/stat.h>
+#include <fcntl.h>
 
+#if !defined(F_OFD_SETLK)
+#define F_OFD_SETLK F_SETLK
+#endif
+
+#define VERBS_XRCD_FILE_OPEN_MAX_RETRIES	10
 
 /* Domain XRC INI QP RBTree key */
 struct fi_ibv_ini_conn_key {
@@ -507,6 +513,75 @@ static int fi_ibv_domain_xrc_validate_hw(struct fi_ibv_domain *domain)
 	return FI_SUCCESS;
 }
 
+FI_VERBS_XRC_ONLY
+static void fi_ibv_domain_xrcd_file_cleanup(struct fi_ibv_domain *domain)
+{
+	struct flock fl = {
+		.l_type = F_WRLCK,
+		.l_whence = SEEK_SET
+	};
+
+	/* If we can promote to a write lock then the file is no longer
+	 * needed. The open logic will handle the race between opening
+	 * creating the file and establishing the read lock. Note that
+	 * F_OFD_SETLK is linux specific, but it allows distinct locks
+	 * within a process if it opens multiple domains. */
+	if (domain->xrc.xrcd_fd >= 0) {
+		if (fcntl(domain->xrc.xrcd_fd, F_OFD_SETLK, &fl) == 0)
+			unlink(fi_ibv_gl_data.msg.xrcd_filename);
+
+		close(domain->xrc.xrcd_fd);
+		domain->xrc.xrcd_fd = -1;
+	}
+}
+
+FI_VERBS_XRC_ONLY
+static int fi_ibv_domain_xrcd_file_init(struct fi_ibv_domain *domain)
+{
+	struct flock fl = {
+		.l_type = F_RDLCK,
+		.l_whence = SEEK_SET
+	};
+	int retries = VERBS_XRCD_FILE_OPEN_MAX_RETRIES;
+	int ret;
+
+	domain->xrc.xrcd_fd = -1;
+	if (!fi_ibv_gl_data.msg.xrcd_filename)
+		return FI_SUCCESS;
+
+	/* If unable to place a read lock on the file then it is in
+	 * the process of being deleted since it was no longer opened.
+	 * Retry and recreate the file. */
+	while(retries-- > 0) {
+		domain->xrc.xrcd_fd = open(fi_ibv_gl_data.msg.xrcd_filename,
+					   O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
+		if (domain->xrc.xrcd_fd < 0) {
+			ret = -errno;
+			VERBS_WARN(FI_LOG_DOMAIN,
+				   "Unable to open %s domain file, %s\n",
+				   fi_ibv_gl_data.msg.xrcd_filename,
+				   strerror(-ret));
+			return ret;
+		}
+
+		if (fcntl(domain->xrc.xrcd_fd, F_OFD_SETLK, &fl) >= 0)
+			return FI_SUCCESS;
+
+		ret = -errno;
+		close(domain->xrc.xrcd_fd);
+		domain->xrc.xrcd_fd = -1;
+		if (ret != -EAGAIN) {
+			VERBS_WARN(FI_LOG_DOMAIN,
+				   "Unable to read lock domain file %s, %s\n",
+				   fi_ibv_gl_data.msg.xrcd_filename,
+				   strerror(-ret));
+			return ret;
+		}
+		usleep(10);
+	}
+	return -FI_EAGAIN;
+}
+
 int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 {
 #if VERBS_HAVE_XRC
@@ -517,16 +592,9 @@ int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 	if (ret)
 		return ret;
 
-	domain->xrc.xrcd_fd = -1;
-	if (fi_ibv_gl_data.msg.xrcd_filename) {
-		domain->xrc.xrcd_fd = open(fi_ibv_gl_data.msg.xrcd_filename,
-				       O_CREAT, S_IWUSR | S_IRUSR);
-		if (domain->xrc.xrcd_fd < 0) {
-			VERBS_WARN(FI_LOG_DOMAIN,
-				   "XRCD file open failed %d\n", errno);
-			return -errno;
-		}
-	}
+	ret = fi_ibv_domain_xrcd_file_init(domain);
+	if (ret)
+		return ret;
 
 	attr.comp_mask = IBV_XRCD_INIT_ATTR_FD | IBV_XRCD_INIT_ATTR_OFLAGS;
 	attr.fd = domain->xrc.xrcd_fd;
@@ -551,10 +619,7 @@ int fi_ibv_domain_xrc_init(struct fi_ibv_domain *domain)
 rbmap_err:
 	(void)ibv_close_xrcd(domain->xrc.xrcd);
 xrcd_err:
-	if (domain->xrc.xrcd_fd >= 0) {
-		close(domain->xrc.xrcd_fd);
-		domain->xrc.xrcd_fd = -1;
-	}
+	fi_ibv_domain_xrcd_file_cleanup(domain);
 	return ret;
 #else /* VERBS_HAVE_XRC */
 	return -FI_ENOSYS;
@@ -579,11 +644,8 @@ int fi_ibv_domain_xrc_cleanup(struct fi_ibv_domain *domain)
 		VERBS_WARN(FI_LOG_DOMAIN, "ibv_close_xrcd failed %d\n", ret);
 		return -ret;
 	}
-	if (domain->xrc.xrcd_fd >= 0) {
-		close(domain->xrc.xrcd_fd);
-		domain->xrc.xrcd_fd = -1;
-	}
 
+	fi_ibv_domain_xrcd_file_cleanup(domain);
 	ofi_rbmap_destroy(domain->xrc.ini_conn_rbmap);
 #endif /* VERBS_HAVE_XRC */
 	return 0;
