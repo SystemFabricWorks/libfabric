@@ -231,8 +231,8 @@ static void fi_ibv_create_shutdown_event(struct fi_ibv_xrc_ep *ep)
 		.fid = &ep->base_ep.util_ep.ep_fid.fid,
 	};
 
-	fi_ibv_eq_write_event(ep->base_ep.eq, FI_SHUTDOWN,
-			      &entry, sizeof(entry));
+	_fi_ibv_eq_write_event(ep->base_ep.eq, FI_SHUTDOWN,
+			       &entry, sizeof(entry));
 }
 
 /* Caller must hold domain:eq:lock */
