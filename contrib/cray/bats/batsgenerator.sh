@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash                                                                                                                              
 # Generate a bats file to run Intel MPI Benchmarks
 # Assumes IMB test suite has been installed and included in Jenkinsfile.verbs file
 # Example:
