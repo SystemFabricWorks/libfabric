@@ -2,19 +2,19 @@
 # Generate a bats file to run Intel MPI Benchmarks
 # Assumes IMB test suite has been installed and included in Jenkinsfile.verbs file
 # Example:
-# Add IMB-EXT Windows test running 20 ranks, 5 ranks per node to imb.bats
-#       ./batsgenerator.sh imb_EXT windows 20 5 imb.bats
+# Add IMB-EXT Window test running 20 ranks, 5 ranks per node to imb.bats
+#       ./batsgenerator.sh imb_EXT window 20 5 imb.bats
 
 # Insert shebang and load test helper
 shebang="#!/usr/bin/env bats\n\n"
 
 # Command line input: test suite
-# E.g. IMB-EXT
+# E.g. imb_EXT
 test_suite=$1
 shift
 
 # Command line input: benchmark
-# E.g. windows
+# E.g. window
 benchmark=$1
 shift
 
