@@ -112,7 +112,7 @@ static inline void vrb_set_ini_conn_key(struct vrb_xrc_ep *ep,
 				  struct vrb_cq, util_cq);
 }
 
-/* Caller must hold domain:xrc.ini_lock */
+/* Caller must hold EQ:lock */
 int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 			       struct vrb_ini_shared_conn **ini_conn) {
 	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
@@ -122,10 +122,13 @@ int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 	int ret;
 
 	vrb_set_ini_conn_key(ep, &key);
+
+	domain->xrc.lock_acquire(&domain->xrc.ini_lock);
 	node = ofi_rbmap_find(domain->xrc.ini_conn_rbmap, &key);
 	if (node) {
 		*ini_conn = node->data;
 		ofi_atomic_inc32(&(*ini_conn)->ref_cnt);
+		domain->xrc.lock_release(&domain->xrc.ini_lock);
 		return FI_SUCCESS;
 	}
 
@@ -134,7 +137,8 @@ int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 	if (!conn) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Unable to allocate INI connection memory\n");
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto conn_alloc_err;
 	}
 
 	conn->tgt_qpn = VRB_NO_INI_TGT_QPNUM;
@@ -142,8 +146,8 @@ int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 	if (!conn->peer_addr) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "mem_dup of peer address failed\n");
-		free(conn);
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto dup_err;
 	}
 	conn->tx_cq = container_of(ep->base_ep.util_ep.tx_cq,
 				   struct vrb_cq, util_cq);
@@ -159,17 +163,22 @@ int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 			   ret);
 		goto insert_err;
 	}
+	domain->xrc.lock_release(&domain->xrc.ini_lock);
+
 	*ini_conn = conn;
 	return FI_SUCCESS;
 
 insert_err:
 	free(conn->peer_addr);
+dup_err:
 	free(conn);
+conn_alloc_err:
+	domain->xrc.lock_release(&domain->xrc.ini_lock);
 	return ret;
 }
 
-/* Caller must hold domain:xrc.ini_lock */
-void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
+/* Caller must hold EQ:lock */
+void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 {
 	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
 	struct vrb_ini_shared_conn *ini_conn;
@@ -197,6 +206,7 @@ void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 	}
 
 	/* Tear down physical INI/TGT when no longer being used */
+	domain->xrc.lock_acquire(&domain->xrc.ini_lock);
 	if (!ofi_atomic_dec32(&ini_conn->ref_cnt)) {
 		if (ini_conn->ini_qp && ibv_destroy_qp(ini_conn->ini_qp))
 			VERBS_WARN(FI_LOG_EP_CTRL,
@@ -206,23 +216,17 @@ void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 		assert(dlist_empty(&ini_conn->pending_list));
 		vrb_set_ini_conn_key(ep, &key);
 		ofi_rbmap_find_delete(domain->xrc.ini_conn_rbmap, &key);
+		domain->xrc.lock_release(&domain->xrc.ini_lock);
+
 		free(ini_conn->peer_addr);
 		free(ini_conn);
 	} else {
+		domain->xrc.lock_release(&domain->xrc.ini_lock);
 		vrb_sched_ini_conn(ini_conn);
 	}
 }
 
-void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
-{
-	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
-
-	domain->xrc.lock_acquire(&domain->xrc.ini_lock);
-	_vrb_put_shared_ini_conn(ep);
-	domain->xrc.lock_release(&domain->xrc.ini_lock);
-}
-
-/* Caller must hold domain:xrc.ini_lock */
+/* Caller must hold EQ:lock */
 void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen)
 {
@@ -234,7 +238,7 @@ void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 	dlist_insert_tail(&ep->ini_conn_entry, &ep->ini_conn->pending_list);
 }
 
-/* Caller must hold domain:eq:lock */
+/* Caller must hold EQ:lock */
 static void vrb_create_shutdown_event(struct vrb_xrc_ep *ep)
 {
 	struct fi_eq_cm_entry entry = {
@@ -247,7 +251,7 @@ static void vrb_create_shutdown_event(struct vrb_xrc_ep *ep)
 		dlistfd_insert_tail(&eq_entry->item, &ep->base_ep.eq->list_head);
 }
 
-/* Caller must hold domain:xrc.ini_lock */
+/* Caller must hold EQ:lock */
 void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn)
 {
 	struct vrb_xrc_ep *ep;
@@ -326,7 +330,7 @@ void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn)
 err:
 		if (ret) {
 			ep->ini_conn->state = last_state;
-			_vrb_put_shared_ini_conn(ep);
+			vrb_put_shared_ini_conn(ep);
 
 			/* We need to let the application know that the
 			 * connect request has failed. */
@@ -336,7 +340,7 @@ err:
 	}
 }
 
-/* Caller must hold domain:xrc:eq:lock */
+/* Caller must hold EQ:lock */
 int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
 			    void *param, size_t paramlen)
 {
@@ -460,7 +464,7 @@ static int vrb_put_tgt_qp(struct vrb_xrc_ep *ep)
 	return FI_SUCCESS;
 }
 
-/* Caller must hold eq:lock */
+/* Caller must hold EQ:lock */
 int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep)
 {
 	vrb_put_shared_ini_conn(ep);
